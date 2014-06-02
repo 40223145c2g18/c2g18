@@ -1,0 +1,39 @@
+% 2014 程式語言二期末報告
+% 機械設計工程系一甲
+% May 5, 2014
+
+# 前言
+
+程式語言二課程目標[^1]
+
+[^1]: 這是註解的用法.
+
+Here is an inline note.^[Inlines notes are easier to write, since
+you don't have to pick an identifier and move down to type the
+note.]
+
+讓學員學習高階程式語言基本語法
+
+讓學員能夠運用高階程式語言處理資料
+
+讓學員能夠運用高階程式語言進行數值運算
+
+讓學員能夠運用高階程式語言進行動態模擬
+
+# Pandoc 手冊
+
+<http://johnmacfarlane.net/pandoc/README.html>
+
+<http://pages.tzengyuxio.me/pandoc/>
+
+共用圖片統一放在 doc 目錄外的 images/common 目錄中, 千萬不可以將圖片檔案放在 doc 目錄中.
+
+若要將圖片與內文放在一起,  可以在圖片後放一反斜線, 表示與隨後的內文結合在一起.
+
+![中美國旗](./../images/common/c2_w14_task2.png) \
+
+各組 images 存放目錄與引用, 統一放在 doc 目錄外的 images 目錄中 (千萬不可放在 doc 目錄中), 並且按照組別建立子目錄存放.
+
+若是要將圖片獨立為一個 figure, 則不要放連結符號.
+
+![中美國旗](./../images/c2g1/c2_w14_task2.png)

@@ -1,0 +1,498 @@
+#@+leo-ver=5-thin
+#@+node:course-mde-tw.20140417093332.2216: * @file application
+#@@language python
+#@@tabwidth -4
+
+#@+<<declarations>>
+#@+node:course-mde-tw.20140417093332.2217: ** <<declarations>>
+#@@language python
+
+########################### 1. 導入所需模組
+import cherrypy
+import os
+import math
+import cmsimply
+
+########################### 2. 設定近端與遠端目錄
+# 確定程式檔案所在目錄, 在 Windows 有最後的反斜線
+_curdir = os.path.join(os.getcwd(), os.path.dirname(__file__))
+# 設定在雲端與近端的資料儲存目錄
+if 'OPENSHIFT_REPO_DIR' in os.environ.keys():
+    # 表示程式在雲端執行
+    download_root_dir = os.environ['OPENSHIFT_DATA_DIR']
+    data_dir = os.environ['OPENSHIFT_DATA_DIR']
+else:
+    # 表示程式在近端執行
+    download_root_dir = _curdir + "/local_data/"
+    data_dir = _curdir + "/local_data/"
+#@-<<declarations>>
+#@+others
+#@+node:course-mde-tw.20140417093332.2218: ** class C2Project
+########################### 3. 建立主物件
+class C2Project(object):
+    _cp_config = {
+    # if there is no utf-8 encoding, no Chinese input available
+    'tools.encode.encoding': 'utf-8',
+    'tools.sessions.on' : True,
+    'tools.sessions.storage_type' : 'file',
+    #'tools.sessions.locking' : 'explicit',
+    'tools.sessions.storage_path' : data_dir+'/tmp',
+    # session timeout is 60 minutes
+    'tools.sessions.timeout' : 60
+    }
+    
+    #@+others
+    #@+node:2014pythonE.20140418074836.2204: *3* __init__
+    def __init__(self):
+        # hope to create downloads and images directories　
+        if not os.path.isdir(download_root_dir+"downloads"):
+            try:
+                os.makedirs(download_root_dir+"downloads")
+            except:
+                print("mkdir error")
+        if not os.path.isdir(download_root_dir+"images"):
+            try:
+                os.makedirs(download_root_dir+"images")
+            except:
+                print("mkdir error")
+        if not os.path.isdir(download_root_dir+"tmp"):
+            try:
+                os.makedirs(download_root_dir+"tmp")
+            except:
+                print("mkdir error")
+        if not os.path.isdir(data_dir+"brython_programs"):
+            try:
+                os.makedirs(data_dir+"brython_programs")
+            except:
+                print("mkdir error")
+        if not os.path.isdir(data_dir+"calc_programs"):
+            try:
+                os.makedirs(data_dir+"calc_programs")
+            except:
+                print("mkdir error")
+
+    #@+node:course-mde-tw.20140417093332.2222: *3* index
+    @cherrypy.expose
+    def index(self):
+        raise cherrypy.HTTPRedirect("/cmsimply")
+        return "這是 2014C2 的期末專案, 不僅以 github 協同開發程式, 報告也採協同模式編寫"
+    #@+node:course-mde-tw.20140417093332.2223: *3* inputform
+    @cherrypy.expose
+    def inputform(self, *args, **kwargs):
+        outstring = '''
+    <!DOCTYPE html> 
+    <html>
+    <head>
+    <meta http-equiv="content-type" content="text/html;charset=utf-8">
+    <script type="text/javascript" src="/static/Brython2.1.0-20140419-113919/brython.js"></script>
+    </head>
+    <body onload="brython({debug:1, cache:'version'})">
+    <script type="text/python3">
+    from browser import doc, alert, ajax
+
+    # ajax can only read data from server
+    _name = '/data/data.txt'
+    try:
+        data = open(_name, encoding="utf-8").read()
+        doc["result"].html = data.replace("\n", "<br />")
+    except:
+        doc["result"].html = "沒有資料!"
+
+    def on_complete(req):
+        print(req.readyState)
+        print('status',req.status)
+        if req.status==200 or req.status==0:
+            doc["result"].html = req.text
+        else:
+            doc["result"].html = "error "+req.text
+
+    def err_msg():
+        doc["result"].html = "server didn't reply after %s seconds" %timeout
+
+    timeout = 4
+
+    def post(url):
+        req = ajax.ajax()
+        req.bind('complete',on_complete)
+        req.set_timeout(timeout,err_msg)
+        req.open('POST',url,True)
+        req.set_header('content-type','application/x-www-form-urlencoded')
+        req.send({'studNum':doc["studNum"].value, 'studName':doc["studName"].value})
+        
+    def validate_form(ev):
+        if doc['studNum'].value == '':
+            alert('學號欄位不可空白!')
+            #doc["result"].html = "學號欄位不可空白!"
+            #doc['studNum'].focus()
+            return False
+        elif doc['studName'].value == '':
+            alert('姓名欄位也不可空白!')
+            #doc["result"].html = "姓名欄位也不可空白!"
+            #doc['studName'].focus()
+            return False
+        else:
+            # 若兩個欄位都填入值, 則呼叫 post, 以 ajax 執行遠端的 /saveData
+            post('/saveData')
+            doc["studNum"].value = ""
+            doc["studName"].value = ""
+    doc['submit'].bind('click', validate_form)
+    </script>
+    '''
+        outstring += "學號:<input id='studNum'></input><br />"
+        outstring += "姓名:<input id='studName'></input><br />"
+        outstring += "<button id='submit'>submit</button><br />"
+        outstring += "<hr>"
+        outstring += "<div id='result'></div>"
+        outstring += '''
+    </body>
+    </html>
+    '''
+        return outstring
+    #@+node:course-mde-tw.20140417093332.2224: *3* rotate_inputform
+    @cherrypy.expose
+    def rotate_inputform(self, *args, **kwargs):
+        outstring = '''
+    <!DOCTYPE html> 
+    <html>
+    <head>
+    <meta http-equiv="content-type" content="text/html;charset=utf-8">
+    <script type="text/javascript" src="/static/Brython2.1.0-20140419-113919/brython.js"></script>
+    </head>
+    <body onload="brython({debug:1, cache:'version'})">
+    <script type="text/python3">
+    from browser import doc, alert, ajax
+
+    def on_complete(req):
+        print(req.readyState)
+        print('status',req.status)
+        if req.status==200 or req.status==0:
+            doc["result"].html = req.text
+        else:
+            doc["result"].html = "error "+req.text
+
+    def err_msg():
+        doc["result"].html = "server didn't reply after %s seconds" %timeout
+
+    timeout = 4
+
+    def post(url):
+        req = ajax.ajax()
+        req.bind('complete',on_complete)
+        req.set_timeout(timeout,err_msg)
+        req.open('POST',url,True)
+        req.set_header('content-type','application/x-www-form-urlencoded')
+        req.send({'cCoord':doc["cCoord"].value, 'dCoord':doc["dCoord"].value})
+        
+    def validate_form(ev):
+        if doc['cCoord'].value == '':
+            alert('C 點座標不可空白!')
+            #doc["result"].html = "C 點座標不可空白!"
+            #doc['cCoord'].focus()
+            return False
+        elif doc['dCoord'].value == '':
+            alert('D 點座標也不可空白!')
+            #doc["result"].html = "D 點座標也不可空白!"
+            #doc['dCoord'].focus()
+            return False
+        else:
+            # 若兩個欄位都填入值, 則呼叫 post, 以 ajax 執行遠端的 /saveData
+            post('/calculatePosition')
+    doc['submit'].bind('click', validate_form)
+    </script>
+    '''
+        outstring += "(x, y 座標以空白隔開)<br />"
+        outstring += "C點座標:<input id='cCoord'><br />"
+        outstring += "D點座標:<input id='dCoord'><br />"
+        outstring += "<button id='submit'>submit</button><br />"
+        outstring += "<div id='result'>(empty)</div>"
+        outstring += '''
+    </body>
+    </html>
+    '''
+        return outstring
+    #@+node:course-mde-tw.20140417093332.2225: *3* calculatePosition
+    @cherrypy.expose
+    def calculatePosition(self, cCoord=None, dCoord=None):
+        # 表單取得之變數為字串
+        xc, yc = cCoord.split(" ")
+        xd, yd = dCoord.split(" ")
+        # 利用 round() 取小數點位置到第四位數
+        radius = round(math.sqrt(math.pow(float(xc) - float(xd), 2) + math.pow(float(yc) - float(yd), 2)), 4)
+        outstring = "半徑為:" + str(radius) +"<br />"
+        deg = math.pi/180
+        for i in range(37):
+            count = i +1
+            # 利用 round() 取小數點位置到第四位數
+            xcoord = round(float(xc) + radius*math.cos(i*10*deg), 4)
+            ycoord = round(float(yc) - radius*math.sin(i*10*deg), 4)
+            outstring += "旋轉 "+ str(10*i) + " 度後, 第 "+ str(count) +" 點座標:"+ str(xcoord) + " , " + str(ycoord) + "<br />"
+        return outstring
+    #@+node:course-mde-tw.20140417093332.2226: *3* saveData
+    @cherrypy.expose
+    def saveData(self, studNum=None, studName=None):
+        outputfile = open(data_dir+"/data/data.txt", "at", encoding="utf-8")
+        # 要先過濾分隔符號
+        outputfile.write(studNum.replace(",", "")+","+studName.replace(",", "")+"\n")
+        outputfile.close()
+        outstring = ""
+        # read data.txt and send data back to client
+        if os.path.isfile(data_dir+"/data/data.txt"):
+            # read lines from file, lines is a list
+            lines = open(data_dir+"/data/data.txt", "r", encoding="utf-8").read().splitlines()
+            for i in range(len(lines)):
+                outstring += lines[i]+"<br />"
+        else:
+            outstring += "no data!"
+        return outstring
+    #@+node:2014spring.20140502183555.1775: *3* drawlines
+    @cherrypy.expose
+    def drawlines(self, *args, **kwargs):
+        outstring = '''
+    <!DOCTYPE html> 
+    <html>
+    <head>
+    <meta http-equiv="content-type" content="text/html;charset=utf-8">
+    <script type="text/javascript" src="/static/Brython2.1.0-20140419-113919/brython.js"></script>
+    </head>
+    <body onload="brython({debug:1, cache:'version'})">
+    <canvas id="plotarea" width="800" height="800"></canvas>
+    <script type="text/python3">
+    # 導入數學模組的所有方法
+    from math import *
+    # 導入時間模組
+    import time
+    # 導入 doc
+    from browser import doc
+
+    # 準備繪圖畫布
+    canvas = doc["plotarea"]
+    ctx = canvas.getContext("2d")
+    # 定義座標轉換(0, 0) 到 (75, 20)
+    def change_ref_system(x, y):
+        return (20 + x * 8, 420 - y * 20)
+    # 定義畫線函式
+    def draw_line(x1, y1, x2, y2, linethick = 3, color = "black"):
+        ctx.beginPath()
+        ctx.lineWidth = linethick
+        ctx.moveTo(x1, y1)
+        ctx.lineTo(x2, y2)
+        ctx.strokeStyle = color
+        ctx.stroke()
+    # 定義一個點類別
+    class Point:
+        def __init__(self, x, y):
+            self.x = x
+            self.y = y
+        def distanceTo(self, obj):
+            if isinstance(obj, Point):
+                return sqrt(pow(obj.x - self.x, 2) + pow(obj.y- self.y, 2))
+            else:
+                raise TypeError("Invalid type in Point.distanceTo()")
+    # 定義一個線類別
+    class Line:
+        def __init__(self, p1, p2):
+            self.p1 = p1
+            self.p2 = p2
+            # 定義一個 Line 的屬性 length
+            self.length = self.p1.distanceTo(self.p2)
+            self.deg = pi/180
+        def rotate(self, angle):
+            # 以 p1  為旋轉中心點
+            # angle 為右手則旋轉角度
+            # 這裡以左上角為原點, x 向右為正, y 向下為正
+            self.p2.x = self.p1.x + self.length*cos(angle*self.deg)
+            self.p2.y = self.p1.y - self.length*sin(angle*self.deg)
+
+    p1 = Point(0, 0)
+    p2 = Point(10, 0)
+    p3 = Point(6.5, 7.8)
+    print("點 p1 到點 p2 的距離:", p1.distanceTo(p2))
+    line1 = Line(p1, p2)
+    print("線 line1 的長度:", line1.length)
+    # 以 p3 為圓心, 旋轉 90 度
+    line1.rotate(90)
+    #work = time.set_interval(graph, 100)
+    print("旋轉後, line1 的長度:", line1.length)
+    print("旋轉後, p1 的座標:", line1.p1.x, ",", line1.p1.y)
+    print("旋轉後, p2 的座標:", line1.p2.x, ",",  line1.p2.y)
+    x1, y1 = change_ref_system(0, 0)
+    for 索引 in range(0, 70, 4):
+        x2, y2 = change_ref_system(索引, 20)
+        draw_line(x1, y1, x2, y2, linethick=3, color="blue")
+    x1, y1 = change_ref_system(70, 0)
+    for 索引 in range(0, 70, 4):
+        x2, y2 = change_ref_system(索引, 20)
+        draw_line(x1, y1, x2, y2, linethick=3, color="red")
+    </script>
+    </body>
+    </html>
+    '''
+        return outstring
+    #@+node:2014spring.20140502183555.1866: *3* fillpoly
+    @cherrypy.expose
+    def fillpoly(self, *args, **kwargs):
+        outstring = '''
+    <!DOCTYPE html> 
+    <html>
+    <head>
+    <meta http-equiv="content-type" content="text/html;charset=utf-8">
+    <script type="text/javascript" src="/static/Brython2.1.0-20140419-113919/brython.js"></script>
+    </head>
+    <body onload="brython({debug:1, cache:'version'})">
+    <canvas id="plotarea" width="800" height="800"></canvas>
+    <script type="text/python3">
+    # 導入數學模組的所有方法
+    from math import *
+    # 導入時間模組
+    import time
+    # 導入 doc
+    from browser import doc
+
+    # 準備繪圖畫布
+    canvas = doc["plotarea"]
+    ctx = canvas.getContext("2d")
+
+    # 定義座標轉換(0, 0) 到 (75, 20)
+    def change_ref_system(x, y):
+        return (20 + x * 8, 420 - y * 20)
+
+    # 定義畫線函式
+    def draw_line(x1, y1, x2, y2, linethick = 3, color = "black"):
+        ctx.beginPath()
+        ctx.lineWidth = linethick
+        ctx.moveTo(x1, y1)
+        ctx.lineTo(x2, y2)
+        ctx.strokeStyle = color
+        ctx.stroke()
+
+    def fill():
+        ctx.beginPath()
+        ctx.moveTo(75,50)
+        ctx.lineTo(100,75)
+        ctx.lineTo(100,25)
+        ctx.fill()
+        
+    def star():
+        ctx.beginPath()
+        ctx.moveTo(0,50)
+        ctx.lineTo(11,16)
+        ctx.lineTo(48,16)
+        ctx.fill()
+
+    ctx.fillStyle = "blue"
+    fill()
+    star()
+
+    x1, y1 = change_ref_system(0, 0)
+    for 索引 in range(0, 70, 4):
+        x2, y2 = change_ref_system(索引, 20)
+        draw_line(x1, y1, x2, y2, linethick=3, color="blue")
+    x1, y1 = change_ref_system(70, 0)
+    for 索引 in range(0, 70, 4):
+        x2, y2 = change_ref_system(索引, 20)
+        draw_line(x1, y1, x2, y2, linethick=3, color="red")
+    </script>
+    </body>
+    </html>
+    '''
+        return outstring
+    #@-others
+    #index.exposed = True
+#@-others
+########################### 4. 安排啟動設定
+# 配合程式檔案所在目錄設定靜態目錄或靜態檔案
+application_conf = {
+        '/static':{
+        'tools.staticdir.on': True,
+        'tools.staticdir.dir': _curdir+"/static"},
+        '/images':{
+        'tools.staticdir.on': True,
+        'tools.staticdir.dir': data_dir+"/images"},
+        '/downloads':{
+        'tools.staticdir.on': True,
+        'tools.staticdir.dir': data_dir+"/downloads"},
+        '/brython_programs':{
+        'tools.staticdir.on': True,
+        'tools.staticdir.dir': data_dir+"/brython_programs"},
+        '/calc_programs':{
+        'tools.staticdir.on': True,
+        'tools.staticdir.dir': data_dir+"/calc_programs"},
+        '/':{
+        'tools.staticdir.on': True,
+        'tools.staticdir.dir': _curdir+"/static/openjscad"}
+    }
+
+########################### 5. 在近端或遠端啟動程式
+# 利用 C2Project() class 產生案例物件
+root = C2Project()
+# 導入 CMSimply 內容管理模組
+root.cmsimply = cmsimply.CMSimply()
+# 導入 Download
+root.cmsimply.download = cmsimply.Download()
+#####################################################
+# 這是 c2g1 組的物件案例定義
+#####################################################
+# 導入 application 目錄下的模組
+# 導入 programs/c2g1 並且命名為 c2g1
+# 模組內建使用 __init__.py 中的 C2G1 類別
+# 若使用 programs/c2g1/class1.py, 則使用 import programs.c2g1.class1 as c2g1
+import programs.c2g1 as c2g1
+# 利用 c2g1 目錄下的 __init__.py 檔案中的 C2G1 類別建立案例物件
+# 而且指到 application 根目錄下的 c2g1
+root.c2g1 = c2g1.C2G1()
+#####################################################
+# 結束 c2g1 組的物件案例定義
+#####################################################
+
+# 以下為 c2g2 的模組導入與連結設定
+import programs.c2g2 as c2g2
+root.c2g2 = c2g2.C2G2()
+import programs.c2g3 as c2g3
+root.c2g3 = c2g3.C2G3()
+import programs.c2g5 as c2g5
+root.c2g5 = c2g5.C2G5()
+import programs.c2g7 as c2g7
+root.c2g7 = c2g7.C2G7()
+import programs.c2g8 as c2g8
+root.c2g8 = c2g8.C2G8()
+import programs.c2g15 as c2g15
+root.c2g15 = c2g15.C2G15()
+# 以下為 c2g19 的模組導入與連結設定
+import programs.c2g19 as c2g19
+root.c2g19 = c2g19.C2G19()
+import programs.c2g23 as c2g23
+root.c2g23 = c2g23.C2G23()
+import programs.c2g4 as c2g4
+root.c2g4 = c2g4.C2G4()
+
+import programs.c2g18 as c2g18
+root.c2g18 = c2g18.C2G18()
+# 以下為 c2g9 的模組導入與連結設定
+import programs.c2g9 as c2g9
+root.c2g9 = c2g9.C2G9()
+
+import programs.c2g16 as c2g16
+root.c2g16 = c2g16.C2G16()
+
+import programs.c2g30 as c2g30
+root.c2g30 = c2g30.C2G30()
+import programs.c2g30.involute as c2g30_involute
+# 加入 c2g30 模組下的 involute.py 且以子模組 index 對應其 INVOLUTE() 類別
+root.c2g30.involute = c2g30_involute.INVOLUTE()
+import programs.c2g30.demo1 as c2g30_demo1
+root.c2g30.demo1 = c2g30_demo1.DEMO1()
+import programs.c2g30.walker as c2g30_walker
+root.c2g30.walker = c2g30_walker.WALKER()
+# 假如在 os 環境變數中存在 'OPENSHIFT_REPO_DIR', 表示程式在 OpenShift 環境中執行
+if 'OPENSHIFT_REPO_DIR' in os.environ.keys():
+    # 雲端執行啟動
+    application = cherrypy.Application(root, config = application_conf)
+else:
+    # 近端執行啟動
+    '''
+    cherrypy.server.socket_port = 8083
+    cherrypy.server.socket_host = '127.0.0.1'
+    '''
+    cherrypy.quickstart(root, config = application_conf)
+
+#@-leo
